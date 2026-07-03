@@ -447,13 +447,59 @@ msgPanel:SetHeight(90)
 ApplyBackdrop(msgPanel, { 0.05, 0.05, 0.05, 1 }, STYLES.panelBorder)
 detailPanel.msgPanel = msgPanel
 
-local msgText = msgPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-msgText:SetPoint("TOPLEFT", msgPanel, "TOPLEFT", 8, -8)
-msgText:SetPoint("BOTTOMRIGHT", msgPanel, "BOTTOMRIGHT", -8, 8)
-msgText:SetJustifyH("LEFT")
-msgText:SetJustifyV("TOP")
-msgText:SetWordWrap(true)
-detailPanel.msgText = msgText
+-- Scrollable, selectable message viewer. WoW has no clipboard API, so copy
+-- works by selecting text in a focused EditBox and pressing Ctrl+C.
+local msgScroll = CreateFrame("ScrollFrame", nil, msgPanel)
+msgScroll:SetPoint("TOPLEFT", msgPanel, "TOPLEFT", 8, -8)
+msgScroll:SetPoint("BOTTOMRIGHT", msgPanel, "BOTTOMRIGHT", -8, 8)
+detailPanel.msgScroll = msgScroll
+
+local copyBox = CreateFrame("EditBox", nil, msgScroll)
+copyBox:SetMultiLine(true)
+copyBox:SetAutoFocus(false)
+copyBox:SetFontObject("GameFontHighlightSmall")
+copyBox:SetJustifyH("LEFT")
+copyBox:SetWidth(msgScroll:GetWidth())
+copyBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+-- Read-only: revert any user edit to the canonical text.
+copyBox:SetScript("OnTextChanged", function(self, userInput)
+	if userInput and self.canonicalText and self:GetText() ~= self.canonicalText then
+		self:SetText(self.canonicalText)
+	end
+end)
+-- Keep the cursor visible while selecting with keyboard/drag.
+copyBox:SetScript("OnCursorChanged", function(self, x, y, w, h)
+	local offset = -y
+	local cur = msgScroll:GetVerticalScroll()
+	local viewH = msgScroll:GetHeight()
+	if offset < cur then
+		msgScroll:SetVerticalScroll(offset)
+	elseif offset + h > cur + viewH then
+		msgScroll:SetVerticalScroll(offset + h - viewH)
+	end
+end)
+msgScroll:SetScrollChild(copyBox)
+msgScroll:SetScript("OnSizeChanged", function(self, w)
+	copyBox:SetWidth(w)
+end)
+msgScroll:EnableMouseWheel(true)
+msgScroll:SetScript("OnMouseWheel", function(self, delta)
+	local maxScroll = self:GetVerticalScrollRange()
+	local new = self:GetVerticalScroll() - delta * 20
+	self:SetVerticalScroll(math.max(0, math.min(maxScroll, new)))
+end)
+detailPanel.copyBox = copyBox
+
+-- Copy All: selects the full message; the user presses Ctrl+C to copy
+-- (no clipboard API exists in WoW Lua).
+local copyAllBtn = CreateFlatButton(detailPanel, 70, 18, "Copy All", "TOPRIGHT", detailPanel, "TOPRIGHT", -10, -9)
+copyAllBtn:SetScript("OnClick", function()
+	local cb = detailPanel.copyBox
+	cb:SetFocus()
+	cb:HighlightText()
+	print("|cff33ff99ChatSpamLog|r: Press Ctrl+C to copy.")
+end)
+detailPanel.copyAllBtn = copyAllBtn
 
 -- Metadata Labels
 local firstSeenText = detailPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -588,6 +634,7 @@ function gui:UpdateDetailPane()
 		detailPanel.placeholder:Show()
 		detailPanel.header:Hide()
 		detailPanel.msgPanel:Hide()
+		detailPanel.copyAllBtn:Hide()
 		detailPanel.firstSeenText:Hide()
 		detailPanel.lastSeenText:Hide()
 		detailPanel.channelsText:Hide()
@@ -603,6 +650,7 @@ function gui:UpdateDetailPane()
 	detailPanel.placeholder:Hide()
 	detailPanel.header:Show()
 	detailPanel.msgPanel:Show()
+	detailPanel.copyAllBtn:Show()
 	detailPanel.firstSeenText:Show()
 	detailPanel.lastSeenText:Show()
 	detailPanel.channelsText:Show()
@@ -612,9 +660,16 @@ function gui:UpdateDetailPane()
 	detailPanel.addBtn:Show()
 	detailPanel.removeBtn:Show()
 	
-	-- Escaped raw message view: replace "|" with "||"
-	local escapedMsg = e.msg:gsub("|", "||")
-	detailPanel.msgText:SetText(escapedMsg)
+	-- Escaped raw message view: replace "|" with "||". Only reset the copy box
+	-- when the selection changes, so refreshes don't clobber a drag-selection.
+	if detailPanel.copyBox.currentKey ~= msgKey then
+		local escapedMsg = e.msg:gsub("|", "||")
+		detailPanel.copyBox.currentKey = msgKey
+		detailPanel.copyBox.canonicalText = escapedMsg
+		detailPanel.copyBox:SetText(escapedMsg)
+		detailPanel.copyBox:SetCursorPosition(0)
+		detailPanel.msgScroll:SetVerticalScroll(0)
+	end
 	
 	detailPanel.firstSeenText:SetText("|cffaabbffFirst:|r " .. e.first)
 	detailPanel.lastSeenText:SetText("|cffaabbffLast:|r " .. e.last)
