@@ -115,7 +115,7 @@ end
 -- ---------------------------------------------------------
 local gui = CreateFrame("Frame", "ChatSpamLogGUI", UIParent, "BackdropTemplate")
 gui:Hide()
-gui:SetSize(700, 500)
+gui:SetSize(700, 516)
 gui:SetPoint("CENTER")
 gui:SetFrameStrata("HIGH")
 gui:SetClampedToScreen(true)
@@ -659,6 +659,7 @@ function gui:UpdateDetailPane()
 	detailPanel.editBox:Show()
 	detailPanel.addBtn:Show()
 	detailPanel.removeBtn:Show()
+	detailPanel.header:SetText(("MESSAGE DETAIL  |cff667788#%s|r"):format(e.id or "?"))
 	
 	-- Escaped raw message view: replace "|" with "||". Only reset the copy box
 	-- when the selection changes, so refreshes don't clobber a drag-selection.
@@ -854,6 +855,7 @@ confirmYesBtn:SetScript("OnClick", function()
 		db.messages = {}
 		db.uniqueCount = 0
 		db.totalCount = 0
+		db.nextId = 1
 		print("|cff33ff99ChatSpamLog|r: Log wiped.")
 	end
 	gui.selectedKey = nil
@@ -865,6 +867,13 @@ local confirmNoBtn = CreateFlatButton(confirmDialog, 100, 24, "Cancel", "BOTTOMR
 confirmNoBtn:SetScript("OnClick", function()
 	confirmOverlay:Hide()
 end)
+
+-- Footer hint pointing at the chat command help
+local footerHint = gui:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+footerHint:SetPoint("BOTTOMLEFT", gui, "BOTTOMLEFT", 12, 7)
+footerHint:SetTextColor(unpack(STYLES.textMuted))
+footerHint:SetText("/csl help — chat commands")
+gui.footerHint = footerHint
 
 -- ---------------------------------------------------------
 -- EVENT HANDLING & INITIALIZATION
@@ -897,7 +906,7 @@ local function HookSlashCommand()
 	local originalSlashHandler = SlashCmdList.CHATSPAMLOG
 	SlashCmdList.CHATSPAMLOG = function(input)
 		local cmd = (input or ""):lower():match("^%s*(%S*)") or ""
-		if cmd == "gui" then
+		if cmd == "gui" or cmd == "" then
 			if ChatSpamLogGUI:IsShown() then
 				ChatSpamLogGUI:Hide()
 			else
