@@ -177,6 +177,20 @@ promptBtn:SetScript("OnClick", function()
 end)
 titleBar.promptBtn = promptBtn
 
+-- Refresh Button (list is a snapshot; lights up when new messages arrive)
+local refreshBtn = CreateFlatButton(titleBar, 60, 20, "Refresh", "RIGHT", promptBtn, "LEFT", -4, 0)
+refreshBtn:SetScript("OnClick", function()
+	gui:RefreshList()
+end)
+refreshBtn:SetScript("OnLeave", function(self)
+	if gui.listDirty then
+		gui:MarkListDirty()
+	else
+		gui:ClearListDirty()
+	end
+end)
+titleBar.refreshBtn = refreshBtn
+
 -- ---------------------------------------------------------
 -- TOOLBAR
 -- ---------------------------------------------------------
@@ -196,7 +210,7 @@ toolbar.counterText = counterText
 
 -- Live Search Box
 local searchBox = CreateFrame("EditBox", nil, toolbar, "BackdropTemplate")
-searchBox:SetSize(155, 24)
+searchBox:SetSize(130, 24)
 searchBox:SetPoint("LEFT", counterText, "RIGHT", 10, 0)
 searchBox:SetBackdrop({
 	bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -312,6 +326,26 @@ sortNewestBtn:SetScript("OnClick", function()
 end)
 toolbar.sortNewestBtn = sortNewestBtn
 
+-- View: Unfiltered only (hide messages already covered by a CCleaner filter)
+local function UpdateUnfilteredButton()
+	local btn = gui.toolbar.unfilteredBtn
+	local active = gui.hideFiltered
+	btn:SetBackdropColor(unpack(active and STYLES.accent or STYLES.panelBg))
+	btn:SetBackdropBorderColor(unpack(active and STYLES.accent or STYLES.panelBorder))
+	btn.text:SetTextColor(unpack(active and STYLES.textMain or STYLES.textMuted))
+end
+
+local unfilteredBtn = CreateFlatButton(toolbar, 64, 22, "Unfiltered", "LEFT", sortNewestBtn, "RIGHT", 8, 0)
+unfilteredBtn:SetScript("OnClick", function()
+	gui.hideFiltered = not gui.hideFiltered
+	UpdateUnfilteredButton()
+	gui:RefreshList()
+end)
+unfilteredBtn:SetScript("OnLeave", function(self)
+	UpdateUnfilteredButton()
+end)
+toolbar.unfilteredBtn = unfilteredBtn
+
 -- Action: Wipe
 local wipeBtn = CreateFlatButton(toolbar, 48, 24, "Wipe", "RIGHT", toolbar, "RIGHT", -6, 0)
 wipeBtn:SetScript("OnClick", function()
@@ -370,9 +404,17 @@ view:SetElementInitializer("BackdropTemplate", function(frame, elementData)
 		frame.countText:SetWidth(75)
 		frame.countText:SetJustifyH("LEFT")
 		
+		-- Sender name string (first sender; full list lives in the detail pane)
+		frame.senderText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		frame.senderText:SetPoint("LEFT", frame.countText, "RIGHT", 4, 0)
+		frame.senderText:SetWidth(80)
+		frame.senderText:SetJustifyH("LEFT")
+		frame.senderText:SetWordWrap(false)
+		frame.senderText:SetMaxLines(1)
+
 		-- Message Preview string
 		frame.msgText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-		frame.msgText:SetPoint("LEFT", frame.countText, "RIGHT", 4, 0)
+		frame.msgText:SetPoint("LEFT", frame.senderText, "RIGHT", 4, 0)
 		frame.msgText:SetPoint("RIGHT", frame, "RIGHT", -8, 0)
 		frame.msgText:SetJustifyH("LEFT")
 		frame.msgText:SetWordWrap(false)
@@ -417,6 +459,8 @@ view:SetElementInitializer("BackdropTemplate", function(frame, elementData)
 	-- Format Text
 	local filterPrefix = IsFiltered(elementData.key) and "|cffff4444[filtered]|r " or ""
 	frame.countText:SetText(("|cff88aaee%dx|r (|cff44ccff%d|r)"):format(elementData.count, elementData.senderCount))
+	local sender = elementData.senders and elementData.senders[1] or "?"
+	frame.senderText:SetText("|cffccbb88" .. sender .. "|r")
 	frame.msgText:SetText(filterPrefix .. elementData.msg)
 end)
 
@@ -735,6 +779,38 @@ function gui:SelectMessage(key)
 end
 
 -- ---------------------------------------------------------
+-- LIVE COUNTERS & DIRTY-LIST INDICATOR
+-- Live events never rebuild the list (rebuilds reorder rows under the
+-- cursor); they update counters and light up the Refresh button instead.
+-- ---------------------------------------------------------
+function gui:UpdateCounters()
+	local db = CHATSPAMLOG_DB
+	if not db then return end
+	self.toolbar.counterText:SetText(
+		("Unique: |cff33ff99%d|r  /  Total: |cff33ff99%d|r"):format(db.uniqueCount, db.totalCount)
+	)
+	if db.paused then
+		self.toolbar.pauseBtn.text:SetText("|cff00ff00Resume|r")
+	else
+		self.toolbar.pauseBtn.text:SetText("|cffff4444Pause|r")
+	end
+end
+
+function gui:MarkListDirty()
+	self.listDirty = true
+	local btn = titleBar.refreshBtn
+	btn:SetBackdropBorderColor(unpack(STYLES.accent))
+	btn.text:SetTextColor(unpack(STYLES.textAccent))
+end
+
+function gui:ClearListDirty()
+	self.listDirty = nil
+	local btn = titleBar.refreshBtn
+	btn:SetBackdropBorderColor(unpack(STYLES.panelBorder))
+	btn.text:SetTextColor(unpack(STYLES.textMain))
+end
+
+-- ---------------------------------------------------------
 -- REFRESH LIST & REBUILD DATA PROVIDER
 -- ---------------------------------------------------------
 function gui:RefreshList()
@@ -742,15 +818,8 @@ function gui:RefreshList()
 	if not db or not db.messages then return end
 	
 	-- 1. Update counters & status
-	self.toolbar.counterText:SetText(
-		("Unique: |cff33ff99%d|r  /  Total: |cff33ff99%d|r"):format(db.uniqueCount, db.totalCount)
-	)
-	
-	if db.paused then
-		self.toolbar.pauseBtn.text:SetText("|cff00ff00Resume|r")
-	else
-		self.toolbar.pauseBtn.text:SetText("|cffff4444Pause|r")
-	end
+	self:UpdateCounters()
+	self:ClearListDirty()
 	
 	-- 2. Gather matching entries
 	local filterText = self.filterText or ""
@@ -763,6 +832,10 @@ function gui:RefreshList()
 			end
 		end
 		
+		if matches and self.hideFiltered and IsFiltered(key) then
+			matches = false
+		end
+
 		if matches then
 			table.insert(items, {
 				key = key,
@@ -980,10 +1053,12 @@ end)
 gui:SetScript("OnShow", function(self)
 	self.sortBy = self.sortBy or "count"
 	UpdateSortButtons()
+	UpdateUnfilteredButton()
 	self:RefreshList()
 end)
 
--- Real-time refresh when new messages are added
+-- Live counter updates + dirty flag when new messages are added
+-- (the list itself only rebuilds on user action, so it never moves mid-scroll)
 gui:RegisterEvent("CHAT_MSG_CHANNEL")
 gui:RegisterEvent("CHAT_MSG_YELL")
 gui:RegisterEvent("CHAT_MSG_WHISPER")
@@ -992,7 +1067,8 @@ gui:SetScript("OnEvent", function(self, event, ...)
 		-- Delay a microsecond to let the core record the entry first
 		C_Timer.After(0.01, function()
 			if self:IsShown() then
-				self:RefreshList()
+				self:UpdateCounters()
+				self:MarkListDirty()
 			end
 		end)
 	end
