@@ -536,6 +536,8 @@ editBox:SetHeight(26)
 ApplyBackdrop(editBox, { 0.05, 0.05, 0.05, 1 }, STYLES.panelBorder)
 editBox:SetFontObject("GameFontHighlightSmall")
 editBox:SetTextInsets(8, 8, 0, 0)
+-- EditBox text regions render past the frame edge on long prefills; clip them.
+editBox:SetClipsChildren(true)
 editBox:SetAutoFocus(false)
 editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 editBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
