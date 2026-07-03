@@ -18,6 +18,25 @@ local function initDB()
 		db.uniqueCount = n
 	end
 	if type(db.totalCount) ~= "number" then db.totalCount = 0 end
+	if type(db.nextId) ~= "number" then db.nextId = 1 end
+	-- Backfill ids for entries created before ids existed (stable order:
+	-- first-seen timestamp, ties by key). Runs once; no-op afterwards.
+	local missing = {}
+	for key, e in pairs(db.messages) do
+		if type(e.id) ~= "number" then
+			missing[#missing + 1] = { key = key, e = e }
+		end
+	end
+	if #missing > 0 then
+		table.sort(missing, function(a, b)
+			if a.e.first ~= b.e.first then return a.e.first < b.e.first end
+			return a.key < b.key
+		end)
+		for _, m in ipairs(missing) do
+			m.e.id = db.nextId
+			db.nextId = db.nextId + 1
+		end
+	end
 end
 
 local function evictOne()
@@ -48,7 +67,8 @@ local function record(msg, sender, channelLabel)
 	local e = db.messages[key]
 	if not e then
 		if db.uniqueCount >= MAX_UNIQUE then evictOne() end
-		e = { msg = msg, count = 0, first = now, senders = {}, seen = {}, senderCount = 0, channels = {} }
+		e = { msg = msg, count = 0, first = now, senders = {}, seen = {}, senderCount = 0, channels = {}, id = db.nextId }
+		db.nextId = db.nextId + 1
 		db.messages[key] = e
 		db.uniqueCount = db.uniqueCount + 1
 	end
@@ -132,6 +152,7 @@ SlashCmdList.CHATSPAMLOG = function(input)
 		end
 	elseif cmd == "wipe" then
 		db.messages, db.uniqueCount, db.totalCount = {}, 0, 0
+		db.nextId = 1
 		print(PREFIX .. "log wiped.")
 	elseif cmd == "pause" then
 		db.paused = true
@@ -140,7 +161,9 @@ SlashCmdList.CHATSPAMLOG = function(input)
 		db.paused = false
 		print(PREFIX .. "capture resumed.")
 	else
+		-- "help", "?", unknown, or bare input (bare normally intercepted by the
+		-- GUI hook to open the GUI; reaching here means the GUI didn't load).
 		printSummary()
-		print(PREFIX .. "usage: /csl stats | wipe | pause | resume")
+		print(PREFIX .. "usage: /csl (opens GUI) | stats | wipe | pause | resume | help")
 	end
 end
