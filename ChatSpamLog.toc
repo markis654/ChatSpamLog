@@ -1,7 +1,7 @@
 ## Interface: 120100, 120005, 120007
 ## Title: ChatSpamLog
 ## Notes: Logs spam-relevant chat (deduplicated) for offline filter-list curation.
-## Author: Mark
+## Author: mspazz#1897
 ## Version: 1.0.0
 ## SavedVariables: CHATSPAMLOG_DB
 ## OptionalDeps: BadBoy
