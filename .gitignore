@@ -2,5 +2,4 @@ screenshots/
 memory/
 CLAUDE.md
 .superpowers/
-publish/stage/
-publish/*.zip
+publish/
