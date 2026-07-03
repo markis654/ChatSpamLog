@@ -18,6 +18,7 @@ is installed. The addon is a pure observer: it never filters, modifies, or block
 
 Each unique message (case-insensitive) becomes one entry with:
 
+- `id` — stable reference number (shown in the GUI; never reused)
 - `count` — times seen
 - `first` / `last` — timestamps
 - `senders` / `senderCount` — distinct senders (a strong spam signal: same text from many senders)
@@ -29,10 +30,19 @@ Capped at 5000 unique messages; the oldest single-occurrence entries are evicted
 
 | Command | Effect |
 |---|---|
-| `/csl` | Status summary + usage |
+| `/csl` (or `/csl gui`) | Toggle the GUI |
+| `/csl help` (or `/csl ?`) | Status summary + command list |
 | `/csl stats` | Counts + top 5 messages by occurrence |
-| `/csl wipe` | Clear the log |
+| `/csl wipe` | Clear the log (also resets message ids) |
 | `/csl pause` / `/csl resume` | Toggle capture (persists across reloads) |
+
+## GUI
+
+`/csl` opens a curation window: searchable/sortable message list, detail pane with
+selectable message text (drag-select or **Copy All**, then Ctrl+C), per-entry `#id`,
+and a filter box that adds substrings straight into BadBoy_CCleaner's live list.
+**LLM Prompt** in the title bar shows a copyable prompt for LLM-assisted curation —
+see [USAGE.md](USAGE.md) for the full workflow and SavedVariables safety caveats.
 
 ## Workflow
 

@@ -170,6 +170,13 @@ closeBtn:SetScript("OnClick", function()
 	gui:Hide()
 end)
 
+-- LLM Prompt Button (opens the copyable curation-prompt dialog)
+local promptBtn = CreateFlatButton(titleBar, 80, 20, "LLM Prompt", "RIGHT", closeBtn, "LEFT", -4, 0)
+promptBtn:SetScript("OnClick", function()
+	gui.promptOverlay:Show()
+end)
+titleBar.promptBtn = promptBtn
+
 -- ---------------------------------------------------------
 -- TOOLBAR
 -- ---------------------------------------------------------
@@ -876,6 +883,96 @@ footerHint:SetPoint("BOTTOMLEFT", gui, "BOTTOMLEFT", 12, 7)
 footerHint:SetTextColor(unpack(STYLES.textMuted))
 footerHint:SetText("/csl help — chat commands")
 gui.footerHint = footerHint
+
+-- ---------------------------------------------------------
+-- LLM PROMPT OVERLAY (MODAL DIALOG)
+-- ---------------------------------------------------------
+local LLM_PROMPT = [==[You are curating chat-spam filters for the WoW addon BadBoy_CCleaner.
+
+Input: my SavedVariables file ChatSpamLog.lua (attached or pasted). Parse the CHATSPAMLOG_DB.messages table. Each entry has: msg (original text), count (times seen), senderCount (distinct senders), senders, channels, first/last timestamps, id.
+
+Propose plain lowercase substrings for the BADBOY_CCLEANER list. Rules:
+1. Matching is literal substring, case-insensitive (the list stores lowercase; BadBoy lowercases incoming messages). No Lua patterns, no wildcards.
+2. Target commercial spam: sales, carries, boosts, gold selling, phishing. Strongest signals: high senderCount (same text from many senders), high count.
+3. Every substring must be distinctive to spam - never a phrase a normal player might type in ordinary chat. Prefer 2+ word phrases ("vip raids", "best service/price"). Reject short or generic candidates ("wts", "cheap", "run").
+4. Ignore item-link and formatting codes inside messages (sequences with Hitem:, Hachievement:, cff colors). Match on the human-readable words around them, never on link payloads.
+5. Skip entries that are not commercial spam (addon whispers like "Gave item", guild recruitment) unless clearly abusive.
+
+For each proposal, output: the substring, which message ids it catches, false-positive risk (low/med/high), and one example message. Finish with the final low-risk list formatted as a Lua array of quoted strings, ready to paste.
+
+If I also paste my current BADBOY_CCLEANER list, exclude anything it already covers.]==]
+
+local promptOverlay = CreateFrame("Frame", nil, gui, "BackdropTemplate")
+promptOverlay:SetAllPoints(gui)
+promptOverlay:SetFrameLevel(gui:GetFrameLevel() + 20)
+promptOverlay:EnableMouse(true)
+promptOverlay:SetBackdrop({
+	bgFile = "Interface\\Buttons\\WHITE8X8"
+})
+promptOverlay:SetBackdropColor(0, 0, 0, 0.75)
+promptOverlay:Hide()
+gui.promptOverlay = promptOverlay
+
+local promptDialog = CreateFrame("Frame", nil, promptOverlay, "BackdropTemplate")
+promptDialog:SetSize(560, 400)
+promptDialog:SetPoint("CENTER")
+ApplyBackdrop(promptDialog, STYLES.bg, STYLES.accent)
+
+local promptTitle = promptDialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+promptTitle:SetPoint("TOP", promptDialog, "TOP", 0, -12)
+promptTitle:SetTextColor(unpack(STYLES.textAccent))
+promptTitle:SetText("LLM Curation Prompt")
+
+local promptHint = promptDialog:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+promptHint:SetPoint("TOP", promptTitle, "BOTTOM", 0, -4)
+promptHint:SetTextColor(unpack(STYLES.textMuted))
+promptHint:SetText("Copy this into any LLM and attach ChatSpamLog.lua from WTF\\...\\SavedVariables (flushed on /reload).")
+
+local promptScrollBg = CreateFrame("Frame", nil, promptDialog, "BackdropTemplate")
+promptScrollBg:SetPoint("TOPLEFT", promptDialog, "TOPLEFT", 12, -54)
+promptScrollBg:SetPoint("BOTTOMRIGHT", promptDialog, "BOTTOMRIGHT", -12, 44)
+ApplyBackdrop(promptScrollBg, { 0.05, 0.05, 0.05, 1 }, STYLES.panelBorder)
+
+local promptScroll = CreateFrame("ScrollFrame", nil, promptScrollBg)
+promptScroll:SetPoint("TOPLEFT", promptScrollBg, "TOPLEFT", 8, -8)
+promptScroll:SetPoint("BOTTOMRIGHT", promptScrollBg, "BOTTOMRIGHT", -8, 8)
+
+local promptBox = CreateFrame("EditBox", nil, promptScroll)
+promptBox:SetMultiLine(true)
+promptBox:SetAutoFocus(false)
+promptBox:SetFontObject("GameFontHighlightSmall")
+promptBox:SetJustifyH("LEFT")
+promptBox:SetWidth(promptScroll:GetWidth())
+promptBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+promptBox:SetScript("OnTextChanged", function(self, userInput)
+	if userInput and self:GetText() ~= LLM_PROMPT then
+		self:SetText(LLM_PROMPT)
+	end
+end)
+promptScroll:SetScrollChild(promptBox)
+promptScroll:SetScript("OnSizeChanged", function(self, w)
+	promptBox:SetWidth(w)
+end)
+promptScroll:EnableMouseWheel(true)
+promptScroll:SetScript("OnMouseWheel", function(self, delta)
+	local maxScroll = self:GetVerticalScrollRange()
+	local new = self:GetVerticalScroll() - delta * 20
+	self:SetVerticalScroll(math.max(0, math.min(maxScroll, new)))
+end)
+promptBox:SetText(LLM_PROMPT)
+promptBox:SetCursorPosition(0)
+
+local promptCopyBtn = CreateFlatButton(promptDialog, 100, 24, "Copy All", "BOTTOMLEFT", promptDialog, "BOTTOMLEFT", 12, 10)
+promptCopyBtn:SetScript("OnClick", function()
+	promptBox:SetFocus()
+	promptBox:HighlightText()
+	print("|cff33ff99ChatSpamLog|r: Press Ctrl+C to copy.")
+end)
+
+local promptCloseBtn = CreateFlatButton(promptDialog, 100, 24, "Close", "BOTTOMRIGHT", promptDialog, "BOTTOMRIGHT", -12, 10)
+promptCloseBtn:SetScript("OnClick", function()
+	promptOverlay:Hide()
+end)
 
 -- ---------------------------------------------------------
 -- EVENT HANDLING & INITIALIZATION
