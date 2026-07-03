@@ -632,8 +632,9 @@ function gui:UpdateDetailPane()
 	
 	-- Prefill lowercase EditBox only when selection changes (never clobber user edits)
 	if detailPanel.editBox.currentKey ~= msgKey then
-			detailPanel.editBox.currentKey = msgKey
+		detailPanel.editBox.currentKey = msgKey
 		detailPanel.editBox:SetText(msgKey)
+		detailPanel.editBox:SetCursorPosition(0)
 	end
 	
 	-- CCleaner button state and text box state
