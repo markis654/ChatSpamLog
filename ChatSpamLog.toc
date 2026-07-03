@@ -2,7 +2,7 @@
 ## Title: ChatSpamLog
 ## Notes: Logs spam-relevant chat (deduplicated) for offline filter-list curation.
 ## Author: mspazz#1897
-## Version: 1.0.0
+## Version: 1.1.0
 ## SavedVariables: CHATSPAMLOG_DB
 ## OptionalDeps: BadBoy
 
