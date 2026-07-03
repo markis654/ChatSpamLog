@@ -7,3 +7,4 @@
 ## OptionalDeps: BadBoy
 
 ChatSpamLog.lua
+ChatSpamLogGUI.lua
